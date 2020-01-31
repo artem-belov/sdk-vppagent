@@ -58,90 +58,95 @@ func (v *srv6Client) Close(ctx context.Context, conn *connection.Connection, opt
 
 func (v *srv6Client) appendInterfaceConfig(ctx context.Context, conn *connection.Connection, connect bool) error {
 	conf := vppagent.Config(ctx)
-	if mechanism := srv6.ToMechanism(conn.GetMechanism()); mechanism != nil {
-		dstHostLocalSID, err := mechanism.SrcHostLocalSID()
-		if err != nil { return err }
-		hardwareAddress, err := mechanism.SrcHardwareAddress()
-		if err != nil { return err }
-		srcBSID, err := mechanism.SrcBSID()
-		if err != nil { return err }
-		srcLocalSID, err := mechanism.SrcLocalSID()
-		if err != nil { return err }
-		dstLocalSID, err := mechanism.DstLocalSID()
-		if err != nil { return err }
-
-		var localIfaceName string
-		if ifaces := conf.GetVppConfig().GetInterfaces(); len(ifaces) == 1 {
-			localIfaceName = ifaces[0].Name
-		} else {
-			return errors.Errorf("failed to choose local interface for srv6 mechanism: %v", ifaces)
-		}
-
-		conf.GetVppConfig().Srv6Localsids = []*vpp_srv6.LocalSID{
-			{
-				Sid: srcLocalSID,
-				EndFunction: &vpp_srv6.LocalSID_EndFunction_DX2{
-					EndFunction_DX2: &vpp_srv6.LocalSID_EndDX2{
-						VlanTag:           math.MaxUint32,
-						OutgoingInterface: localIfaceName,
-					},
-				},
-			},
-		}
-		conf.GetVppConfig().Srv6Policies = []*vpp_srv6.Policy{
-			{
-				Bsid: srcBSID,
-				SegmentLists: []*vpp_srv6.Policy_SegmentList{
-					{
-						Segments: []string{
-							dstHostLocalSID,
-							dstLocalSID,
-						},
-						Weight: 0,
-					},
-				},
-				SrhEncapsulation: true,
-			},
-		}
-
-		conf.GetVppConfig().Srv6Steerings = []*vpp_srv6.Steering{
-			{
-				Name: conn.GetId(),
-				PolicyRef: &vpp_srv6.Steering_PolicyBsid{
-					PolicyBsid: srcBSID,
-				},
-				Traffic: &vpp_srv6.Steering_L2Traffic_{
-					L2Traffic: &vpp_srv6.Steering_L2Traffic{
-						InterfaceName: localIfaceName,
-					},
-				},
-			},
-		}
-
-		if connect {
-			conf.GetVppConfig().Vrfs = []*vpp_l3.VrfTable{
-				{
-					Id:       math.MaxUint32,
-					Protocol: vpp_l3.VrfTable_IPV6,
-					Label:    "SRv6 steering of IP6 prefixes through BSIDs",
-				},
-			}
-
-			conf.GetVppConfig().Routes = append(conf.GetVppConfig().Routes, &vpp.Route{
-				Type:              vpp_l3.Route_INTER_VRF,
-				OutgoingInterface: "mgmt",
-				DstNetwork:        dstHostLocalSID + "/128",
-				Weight:            1,
-				NextHopAddr:       dstHostLocalSID,
-			})
-
-			conf.GetVppConfig().Arps = append(conf.GetVppConfig().Arps, &vpp.ARPEntry{
-				Interface:   "mgmt",
-				IpAddress:   dstHostLocalSID,
-				PhysAddress: hardwareAddress,
-				Static:      true,
-			})
-		}
+	mechanism := srv6.ToMechanism(conn.GetMechanism());
+	if mechanism == nil {
+		return nil
 	}
+	vppConfig := conf.GetVppConfig()
+
+	dstHostLocalSID, err := mechanism.SrcHostLocalSID()
+	if err != nil { return err }
+	hardwareAddress, err := mechanism.SrcHardwareAddress()
+	if err != nil { return err }
+	srcBSID, err := mechanism.SrcBSID()
+	if err != nil { return err }
+	srcLocalSID, err := mechanism.SrcLocalSID()
+	if err != nil { return err }
+	dstLocalSID, err := mechanism.DstLocalSID()
+	if err != nil { return err }
+
+	var localIfaceName string
+	if ifaces := vppConfig.GetInterfaces(); len(ifaces) == 1 {
+		localIfaceName = ifaces[0].Name
+	} else {
+		return errors.Errorf("failed to choose local interface for srv6 mechanism: %v", ifaces)
+	}
+
+	vppConfig.Srv6Localsids = []*vpp_srv6.LocalSID{
+		{
+			Sid: srcLocalSID,
+			EndFunction: &vpp_srv6.LocalSID_EndFunction_DX2{
+				EndFunction_DX2: &vpp_srv6.LocalSID_EndDX2{
+					VlanTag:           math.MaxUint32,
+					OutgoingInterface: localIfaceName,
+				},
+			},
+		},
+	}
+	vppConfig.Srv6Policies = []*vpp_srv6.Policy{
+		{
+			Bsid: srcBSID,
+			SegmentLists: []*vpp_srv6.Policy_SegmentList{
+				{
+					Segments: []string{
+						dstHostLocalSID,
+						dstLocalSID,
+					},
+					Weight: 0,
+				},
+			},
+			SrhEncapsulation: true,
+		},
+	}
+
+	vppConfig.Srv6Steerings = []*vpp_srv6.Steering{
+		{
+			Name: conn.GetId(),
+			PolicyRef: &vpp_srv6.Steering_PolicyBsid{
+				PolicyBsid: srcBSID,
+			},
+			Traffic: &vpp_srv6.Steering_L2Traffic_{
+				L2Traffic: &vpp_srv6.Steering_L2Traffic{
+					InterfaceName: localIfaceName,
+				},
+			},
+		},
+	}
+
+	if connect {
+		vppConfig.Vrfs = []*vpp_l3.VrfTable{
+			{
+				Id:       math.MaxUint32,
+				Protocol: vpp_l3.VrfTable_IPV6,
+				Label:    "SRv6 steering of IP6 prefixes through BSIDs",
+			},
+		}
+
+		vppConfig.Routes = append(vppConfig.Routes, &vpp.Route{
+			Type:              vpp_l3.Route_INTER_VRF,
+			OutgoingInterface: "mgmt",
+			DstNetwork:        dstHostLocalSID + "/128",
+			Weight:            1,
+			NextHopAddr:       dstHostLocalSID,
+		})
+
+		vppConfig.Arps = append(vppConfig.Arps, &vpp.ARPEntry{
+			Interface:   "mgmt",
+			IpAddress:   dstHostLocalSID,
+			PhysAddress: hardwareAddress,
+			Static:      true,
+		})
+	}
+
 	return nil
 }
