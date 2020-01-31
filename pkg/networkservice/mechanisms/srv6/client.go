@@ -28,9 +28,8 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 
-	"github.com/networkservicemesh/api/pkg/api/connection"
-	"github.com/networkservicemesh/api/pkg/api/connection/mechanisms/srv6"
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
+	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/srv6"
 	"github.com/networkservicemesh/sdk-vppagent/pkg/networkservice/vppagent"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/core/next"
 )
@@ -42,21 +41,21 @@ func NewClient() networkservice.NetworkServiceClient {
 	return &srv6Client{}
 }
 
-func (v *srv6Client) Request(ctx context.Context, request *networkservice.NetworkServiceRequest, opts ...grpc.CallOption) (*connection.Connection, error) {
+func (v *srv6Client) Request(ctx context.Context, request *networkservice.NetworkServiceRequest, opts ...grpc.CallOption) (*networkservice.Connection, error) {
 	if err := v.appendInterfaceConfig(ctx, request.GetConnection(), true); err != nil {
 		return nil, err
 	}
 	return next.Client(ctx).Request(ctx, request, opts...)
 }
 
-func (v *srv6Client) Close(ctx context.Context, conn *connection.Connection, opts ...grpc.CallOption) (*empty.Empty, error) {
+func (v *srv6Client) Close(ctx context.Context, conn *networkservice.Connection, opts ...grpc.CallOption) (*empty.Empty, error) {
 	if err := v.appendInterfaceConfig(ctx, conn, false); err != nil {
 		return nil, err
 	}
 	return next.Client(ctx).Close(ctx, conn, opts...)
 }
 
-func (v *srv6Client) appendInterfaceConfig(ctx context.Context, conn *connection.Connection, connect bool) error {
+func (v *srv6Client) appendInterfaceConfig(ctx context.Context, conn *networkservice.Connection, connect bool) error {
 	conf := vppagent.Config(ctx)
 	mechanism := srv6.ToMechanism(conn.GetMechanism());
 	if mechanism == nil {

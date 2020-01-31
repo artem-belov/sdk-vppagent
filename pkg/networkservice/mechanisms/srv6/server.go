@@ -26,9 +26,8 @@ import (
 	vpp_srv6 "github.com/ligato/vpp-agent/api/models/vpp/srv6"
 	"github.com/pkg/errors"
 
-	"github.com/networkservicemesh/api/pkg/api/connection"
-	"github.com/networkservicemesh/api/pkg/api/connection/mechanisms/srv6"
 	"github.com/networkservicemesh/api/pkg/api/networkservice"
+	"github.com/networkservicemesh/api/pkg/api/networkservice/mechanisms/srv6"
 	"github.com/networkservicemesh/sdk-vppagent/pkg/networkservice/vppagent"
 	"github.com/networkservicemesh/sdk/pkg/networkservice/core/next"
 )
@@ -40,21 +39,21 @@ func NewServer() networkservice.NetworkServiceServer {
 	return &srv6Server{}
 }
 
-func (v *srv6Server) Request(ctx context.Context, request *networkservice.NetworkServiceRequest) (*connection.Connection, error) {
+func (v *srv6Server) Request(ctx context.Context, request *networkservice.NetworkServiceRequest) (*networkservice.Connection, error) {
 	if err := v.appendInterfaceConfig(ctx, request.GetConnection(), true); err != nil {
 		return nil, err
 	}
 	return next.Server(ctx).Request(ctx, request)
 }
 
-func (v *srv6Server) Close(ctx context.Context, conn *connection.Connection) (*empty.Empty, error) {
+func (v *srv6Server) Close(ctx context.Context, conn *networkservice.Connection) (*empty.Empty, error) {
 	if err := v.appendInterfaceConfig(ctx, conn, false); err != nil {
 		return nil, err
 	}
 	return next.Server(ctx).Close(ctx, conn)
 }
 
-func (v *srv6Server) appendInterfaceConfig(ctx context.Context, conn *connection.Connection, connect bool) error {
+func (v *srv6Server) appendInterfaceConfig(ctx context.Context, conn *networkservice.Connection, connect bool) error {
 	conf := vppagent.Config(ctx)
 	mechanism := srv6.ToMechanism(conn.GetMechanism());
 	if mechanism == nil {
